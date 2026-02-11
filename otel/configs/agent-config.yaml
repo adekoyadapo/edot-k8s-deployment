@@ -1,0 +1,72 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  kubeletstats:
+    collection_interval: 20s
+    auth_type: serviceAccount
+    endpoint: ${KUBELET_HOST}:10250
+    insecure_skip_verify: true
+    metric_groups:
+      - node
+      - pod
+      - container
+      - volume
+  filelog:
+    include:
+      - /var/log/containers/*.log
+    start_at: end
+    operators:
+      - type: json_parser
+        id: container-json
+        parse_from: body
+        if: 'body matches "^\\{"'
+      - type: move
+        from: attributes.log
+        to: body
+        if: 'attributes.log != nil'
+      - type: regex_parser
+        id: level-parser
+        regex: '(?P<log_level>TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)'
+        parse_from: body
+      - type: move
+        from: attributes.log_level
+        to: attributes["log.level"]
+        if: 'attributes.log_level != nil'
+processors:
+  resourcedetection:
+    detectors: [env, system, k8snode]
+  k8sattributes:
+    auth_type: serviceAccount
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+exporters:
+  otlp:
+    endpoint: edot-gateway:4317
+    tls:
+      insecure: true
+service:
+  telemetry:
+    logs:
+      level: "info"
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resourcedetection, k8sattributes, memory_limiter, batch]
+      exporters: [otlp]
+    metrics:
+      receivers: [otlp, kubeletstats]
+      processors: [resourcedetection, k8sattributes, memory_limiter, batch]
+      exporters: [otlp]
+    logs:
+      receivers: [filelog]
+      processors: [resourcedetection, k8sattributes, memory_limiter, batch]
+      exporters: [otlp]

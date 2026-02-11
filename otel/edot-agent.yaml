@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: edot-agent
+spec:
+  selector:
+    matchLabels:
+      app: edot-agent
+  template:
+    metadata:
+      labels:
+        app: edot-agent
+    spec:
+      serviceAccountName: edot-collector
+      containers:
+        - name: edot-agent
+          image: elastic/elastic-agent:9.2.5
+          args: ["--config", "/etc/otelcol-config.yml"]
+          env:
+            - name: ELASTIC_AGENT_OTEL
+              value: "true"
+            - name: STORAGE_DIR
+              value: /usr/share/elastic-agent
+            - name: KUBELET_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - containerPort: 4317
+            - containerPort: 4318
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-config.yml
+              subPath: otelcol-config.yaml
+            - name: varlogcontainers
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: varlogpods
+              mountPath: /var/log/pods
+              readOnly: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: edot-agent-config
+        - name: varlogcontainers
+          hostPath:
+            path: /var/log/containers
+        - name: varlogpods
+          hostPath:
+            path: /var/log/pods
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edot-agent
+spec:
+  selector:
+    app: edot-agent
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318

@@ -1,0 +1,36 @@
+# OS / editor
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*.bak
+*.tmp
+*.log
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv*/
+.env
+
+# Node / JS
+node_modules/
+
+# K8s / local
+.kube/
+*.kubeconfig
+
+# Build artifacts
+/dist/
+/build/
+
+# Misc
+.env.local
+.env.*

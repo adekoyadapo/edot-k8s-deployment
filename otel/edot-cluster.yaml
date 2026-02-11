@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edot-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edot-cluster
+  template:
+    metadata:
+      labels:
+        app: edot-cluster
+    spec:
+      serviceAccountName: edot-collector
+      containers:
+        - name: edot-cluster
+          image: elastic/elastic-agent:9.2.5
+          args: ["--config", "/etc/otelcol-config.yml"]
+          env:
+            - name: ELASTIC_AGENT_OTEL
+              value: "true"
+            - name: STORAGE_DIR
+              value: /usr/share/elastic-agent
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-config.yml
+              subPath: otelcol-config.yaml
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: edot-cluster-config

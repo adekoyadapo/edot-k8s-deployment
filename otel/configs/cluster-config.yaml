@@ -1,0 +1,38 @@
+receivers:
+  k8s_cluster:
+    collection_interval: 30s
+  k8sobjects:
+    auth_type: serviceAccount
+    objects:
+      - name: events
+        mode: watch
+processors:
+  resourcedetection:
+    detectors: [env, system]
+  k8sattributes:
+    auth_type: serviceAccount
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+exporters:
+  otlp:
+    endpoint: edot-gateway:4317
+    tls:
+      insecure: true
+service:
+  telemetry:
+    logs:
+      level: "info"
+  pipelines:
+    metrics:
+      receivers: [k8s_cluster]
+      processors: [resourcedetection, k8sattributes, memory_limiter, batch]
+      exporters: [otlp]
+    logs:
+      receivers: [k8sobjects]
+      processors: [resourcedetection, k8sattributes, memory_limiter, batch]
+      exporters: [otlp]

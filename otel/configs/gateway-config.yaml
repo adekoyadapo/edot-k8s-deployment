@@ -1,0 +1,63 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1024
+    spike_limit_mib: 256
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+  transform/logs:
+    log_statements:
+      - context: log
+        statements:
+          - set(attributes["log.level"], severity_text) where attributes["log.level"] == nil and severity_text != ""
+          - set(attributes["log.level"], body["log.level"]) where IsMap(body) and body["log.level"] != nil
+          - set(attributes["service.name"], body["service.name"]) where IsMap(body) and body["service.name"] != nil
+          - set(attributes["service.version"], body["service.version"]) where IsMap(body) and body["service.version"] != nil
+          - set(attributes["service.namespace"], body["service.namespace"]) where IsMap(body) and body["service.namespace"] != nil
+          - set(attributes["deployment.environment"], body["deployment.environment"]) where IsMap(body) and body["deployment.environment"] != nil
+          - set(attributes["event.dataset"], body["event.dataset"]) where IsMap(body) and body["event.dataset"] != nil
+          - set(attributes["trace.id"], body["trace.id"]) where IsMap(body) and body["trace.id"] != nil
+          - set(attributes["span.id"], body["span.id"]) where IsMap(body) and body["span.id"] != nil
+          - set(body, body["message"]) where IsMap(body) and body["message"] != nil
+  elastictrace:
+    # Deprecated for Stack 8.19 compatibility
+  elasticinframetrics:
+    # Deprecated for Stack 8.19 compatibility
+connectors:
+  elasticapm:
+exporters:
+  elasticsearch/otel:
+    endpoints: ["https://quickstart-es-http.observability-lab.svc:9200"]
+    user: ${ELASTIC_USERNAME}
+    password: ${ELASTIC_PASSWORD}
+    tls:
+      ca_file: /usr/share/edot-certs/ca.crt
+service:
+  telemetry:
+    logs:
+      level: "info"
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, elastictrace]
+      exporters: [elasticapm, elasticsearch/otel]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, elasticinframetrics]
+      exporters: [elasticsearch/otel]
+    metrics/aggregated-otel-metrics:
+      receivers: [elasticapm]
+      processors: [memory_limiter, batch]
+      exporters: [elasticsearch/otel]
+    logs:
+      receivers: [otlp]
+      processors: [transform/logs, memory_limiter, batch]
+      exporters: [elasticsearch/otel]

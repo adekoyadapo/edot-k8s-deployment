@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edot-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edot-gateway
+  template:
+    metadata:
+      labels:
+        app: edot-gateway
+    spec:
+      serviceAccountName: edot-collector
+      containers:
+        - name: edot-gateway
+          image: elastic/elastic-agent:9.2.5
+          args: ["--config", "/etc/otelcol-config.yml"]
+          env:
+            - name: ELASTIC_AGENT_OTEL
+              value: "true"
+            - name: STORAGE_DIR
+              value: /usr/share/elastic-agent
+            - name: ELASTIC_USERNAME
+              value: elastic
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: quickstart-es-elastic-user
+                  key: elastic
+          ports:
+            - containerPort: 4317
+            - containerPort: 4318
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol-config.yml
+              subPath: otelcol-config.yaml
+            - name: es-ca
+              mountPath: /usr/share/edot-certs/ca.crt
+              subPath: ca.crt
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+      volumes:
+        - name: config
+          configMap:
+            name: edot-gateway-config
+        - name: es-ca
+          secret:
+            secretName: quickstart-es-http-certs-public
+            items:
+              - key: tls.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edot-gateway
+spec:
+  selector:
+    app: edot-gateway
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: edot-gateway-hpa
+spec:
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 2
+          periodSeconds: 15
+      selectPolicy: Max
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: edot-gateway
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
